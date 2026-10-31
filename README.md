@@ -1,36 +1,45 @@
-# نوتة (Nota) — Expo MVP
+# نوتة (Nota)
 
-Local-first Arabic RTL notes app. Brand «نوتة», Android package `com.smartnotes.app`.
+تطبيق ملاحظات عربي محليّ أولًا، مصمم لالتقاط الأفكار وتنظيمها بسرعة وخصوصية. يعمل على Android وiOS باستخدام Expo وReact Native، ويحفظ الملاحظات على الجهاز دون الحاجة إلى حساب.
 
-## Requirements
+## المتطلبات
 
-- Node 20+
-- Expo Go (Android) or emulator / device
-- Optional: Expo account + EAS CLI for cloud Android builds
+- Node.js 22.13 أو أحدث
+- Expo Go على Android أو محاكي/جهاز مناسب
+- حساب Expo اختياري لإنشاء نسخ EAS السحابية
 
-## Run
+## التشغيل
 
 ```bash
-cd /home/ubuntu/nota-expo
+cd note
 npm install
 npx expo start
 ```
 
-Then scan the QR code with Expo Go, or press `a` for Android.
+امسح رمز QR عبر Expo Go، أو استخدم `a` لتشغيل Android عند توفر محاكي.
 
-## Android EAS build (optional)
+## الميزات
+
+- إنشاء الملاحظات وتحريرها بمقاطع نصية وقوائم تحقق وصور.
+- البحث في العناوين والمحتوى والوسوم باستخدام SQLite وFTS5.
+- تنظيم المحتوى بالمجلدات والوسوم، وتثبيت الملاحظات، واستعادتها من سلة المحذوفات.
+- ألوان متعددة للملاحظات ومظهر فاتح أو داكن أو يتبع إعداد الجهاز.
+- واجهة RTL عربية بخط Cairo، ومساحة رئيسية تعرض الملاحظات المثبتة والإحصاءات وروابط التنظيم.
+- تخزين محلي دون حساب أو مزامنة سحابية.
+
+## الفحوص
+
+```bash
+npx tsc --noEmit
+npx expo lint
+npx expo-doctor
+```
+
+## إنشاء نسخة Android عبر EAS
 
 ```bash
 npx eas-cli login
 npx eas build --platform android --profile preview
 ```
 
-Do not commit Expo credentials or tokens.
-
-## MVP features
-
-- Home grid, block editor (text / checklist / image), note colors
-- expo-sqlite + FTS5 search
-- Folders, tags, trash (soft delete / restore / purge)
-- Theme (light / dark / system), Share sheet
-- Arabic UI + forced RTL, Cairo fonts, teal mist atmosphere
+لا تحفظ بيانات اعتماد Expo أو الرموز السرية في المستودع.

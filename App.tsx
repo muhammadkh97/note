@@ -28,7 +28,7 @@ function AppShell() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgTop }}>
-      <StatusBar style={resolved === 'dark' ? 'light' : 'light'} />
+      <StatusBar style={resolved === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
         <RootNavigator />
       </SafeAreaView>
