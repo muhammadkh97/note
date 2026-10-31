@@ -23,7 +23,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -42,8 +43,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "c24872ba-347b-42e4-b5fb-5111af13640e"
       }
-    }
+    },
+    "owner": "muhmdkh"
   }
 }
