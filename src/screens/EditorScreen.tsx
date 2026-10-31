@@ -44,27 +44,35 @@ export function EditorScreen({ navigation, route }: Props) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState('');
   const [ready, setReady] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
+    let active = true;
     (async () => {
-      const [note, f, t] = await Promise.all([
-        notesRepo.getNote(noteId),
-        foldersRepo.listFolders(),
-        tagsRepo.listTags(),
-      ]);
-      if (!note) {
-        navigation.goBack();
-        return;
+      try {
+        const [note, f, t] = await Promise.all([
+          notesRepo.getNote(noteId),
+          foldersRepo.listFolders(),
+          tagsRepo.listTags(),
+        ]);
+        if (!active) return;
+        if (!note) {
+          navigation.goBack();
+          return;
+        }
+        setTitle(note.title);
+        setBlocks(parseBlocks(note.blocksJson));
+        setColor(note.color);
+        setFolderId(note.folderId);
+        setSelectedTagIds(note.tags.map((x) => x.id));
+        setFolders(f);
+        setAllTags(t);
+        setReady(true);
+      } catch {
+        if (active) Alert.alert(ar.error, ar.loadError, [{ text: ar.cancel, onPress: () => navigation.goBack() }]);
       }
-      setTitle(note.title);
-      setBlocks(parseBlocks(note.blocksJson));
-      setColor(note.color);
-      setFolderId(note.folderId);
-      setSelectedTagIds(note.tags.map((x) => x.id));
-      setFolders(f);
-      setAllTags(t);
-      setReady(true);
     })();
+    return () => { active = false; };
   }, [noteId, navigation]);
 
   const persist = useCallback(
@@ -74,13 +82,21 @@ export function EditorScreen({ navigation, route }: Props) {
       nextColor = color,
       nextFolder = folderId
     ) => {
-      await notesRepo.updateNote(noteId, {
-        title: nextTitle,
-        blocks: nextBlocks,
-        color: nextColor,
-        folderId: nextFolder,
-      });
-      await notesRepo.setNoteTags(noteId, selectedTagIds);
+      setSaveState('saving');
+      try {
+        const updated = await notesRepo.updateNote(noteId, {
+          title: nextTitle,
+          blocks: nextBlocks,
+          color: nextColor,
+          folderId: nextFolder,
+        });
+        if (!updated) throw new Error('Note no longer exists');
+        await notesRepo.setNoteTags(noteId, selectedTagIds);
+        setSaveState('saved');
+      } catch (error) {
+        setSaveState('error');
+        throw error;
+      }
     },
     [noteId, title, blocks, color, folderId, selectedTagIds]
   );
@@ -93,22 +109,45 @@ export function EditorScreen({ navigation, route }: Props) {
     return () => clearTimeout(handle);
   }, [ready, title, blocks, color, folderId, selectedTagIds, persist]);
 
+  useEffect(() => {
+    let handlingRemoval = false;
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (!ready || handlingRemoval) return;
+      event.preventDefault();
+      handlingRemoval = true;
+      const action = event.data.action;
+      persist()
+        .then(() => {
+          unsubscribe();
+          navigation.dispatch(action);
+        })
+        .catch(() => {
+          handlingRemoval = false;
+          Alert.alert(ar.error, ar.notSaved);
+        });
+    });
+    return unsubscribe;
+  }, [navigation, persist, ready]);
+
   const onShare = async () => {
-    const body = `${title.trim() || ar.untitled}\n\n${blocksToPlainText(blocks)}`;
+    const content = blocksToPlainText(blocks).trim();
+    const body = [title.trim() || ar.untitled, content].filter(Boolean).join('\n\n');
     try {
       await Share.share({ message: body, title: title.trim() || ar.brand });
     } catch {
-      Alert.alert(ar.share, body.slice(0, 400));
+      Alert.alert(ar.error, ar.shareError);
     }
   };
 
   const addTag = async () => {
     if (!tagDraft.trim()) return;
-    const tag = await tagsRepo.createTag(tagDraft);
-    setTagDraft('');
-    setAllTags(await tagsRepo.listTags());
-    if (!selectedTagIds.includes(tag.id)) {
-      setSelectedTagIds((ids) => [...ids, tag.id]);
+    try {
+      const tag = await tagsRepo.createTag(tagDraft);
+      setTagDraft('');
+      setAllTags(await tagsRepo.listTags());
+      setSelectedTagIds((ids) => ids.includes(tag.id) ? ids : [...ids, tag.id]);
+    } catch {
+      Alert.alert(ar.error, ar.saveError);
     }
   };
 
@@ -123,9 +162,7 @@ export function EditorScreen({ navigation, route }: Props) {
     <Atmosphere>
       <ScreenHeader
         title={ar.editor}
-        onBack={() => {
-          persist().finally(() => navigation.goBack());
-        }}
+        onBack={() => navigation.goBack()}
         right={
           <Pressable onPress={onShare}>
             <Text style={{ color: colors.brand, fontFamily: fonts.medium }}>
@@ -138,6 +175,11 @@ export function EditorScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.statusRow}>
+          <Text style={{ color: saveState === 'error' ? colors.danger : colors.textMuted, fontFamily: fonts.regular, fontSize: 11 }}>
+            {saveState === 'saving' ? ar.saving : saveState === 'saved' ? ar.saved : saveState === 'error' ? ar.notSaved : ar.autosave}
+          </Text>
+        </View>
         <View
           style={[
             styles.sheet,
@@ -146,6 +188,8 @@ export function EditorScreen({ navigation, route }: Props) {
         >
           <TextInput
             value={title}
+            maxLength={120}
+            returnKeyType="next"
             onChangeText={setTitle}
             placeholder={ar.titlePlaceholder}
             placeholderTextColor={colors.textMuted}
@@ -173,6 +217,9 @@ export function EditorScreen({ navigation, route }: Props) {
             return (
               <Pressable
                 key={key}
+                accessibilityRole="radio"
+                accessibilityLabel={c.label}
+                accessibilityState={{ checked: color === key }}
                 onPress={() => setColor(key)}
                 style={[
                   styles.swatch,
@@ -323,6 +370,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 48,
   },
+  statusRow: { alignItems: 'flex-end', marginBottom: 5, paddingHorizontal: 2 },
   sheet: {
     borderRadius: 20,
     padding: 14,

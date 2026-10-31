@@ -68,6 +68,41 @@ async function withPreview(note: Note): Promise<NoteWithPreview> {
   };
 }
 
+async function withPreviews(notes: Note[]): Promise<NoteWithPreview[]> {
+  if (notes.length === 0) return [];
+  const db = await getDb();
+  const tagsByNote = new Map<string, Tag[]>();
+  const chunkSize = 400;
+  for (let offset = 0; offset < notes.length; offset += chunkSize) {
+    const chunk = notes.slice(offset, offset + chunkSize);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const rows = await db.getAllAsync<{
+      note_id: string;
+      id: string;
+      name: string;
+      created_at: number;
+    }>(
+      `SELECT nt.note_id, t.id, t.name, t.created_at
+       FROM note_tags nt
+       INNER JOIN tags t ON t.id = nt.tag_id
+       WHERE nt.note_id IN (${placeholders})
+       ORDER BY t.name COLLATE NOCASE`,
+      ...chunk.map((note) => note.id)
+    );
+    for (const row of rows) {
+      const tags = tagsByNote.get(row.note_id) ?? [];
+      tags.push({ id: row.id, name: row.name, createdAt: row.created_at });
+      tagsByNote.set(row.note_id, tags);
+    }
+  }
+  return notes.map((note) => ({
+    ...note,
+    preview:
+      blocksToPreview(parseBlocks(note.blocksJson)) || note.title || 'ملاحظة فارغة',
+    tags: tagsByNote.get(note.id) ?? [],
+  }));
+}
+
 async function syncFts(note: Note): Promise<void> {
   const db = await getDb();
   const blocks = parseBlocks(note.blocksJson);
@@ -100,7 +135,7 @@ export async function listActiveNotes(
        ORDER BY pinned DESC, updated_at DESC`
     );
   }
-  return Promise.all(rows.map((r) => withPreview(mapNote(r))));
+  return withPreviews(rows.map(mapNote));
 }
 
 export async function listTrashNotes(): Promise<NoteWithPreview[]> {
@@ -110,7 +145,7 @@ export async function listTrashNotes(): Promise<NoteWithPreview[]> {
      WHERE deleted_at IS NOT NULL
      ORDER BY deleted_at DESC`
   );
-  return Promise.all(rows.map((r) => withPreview(mapNote(r))));
+  return withPreviews(rows.map(mapNote));
 }
 
 export async function getNote(id: string): Promise<NoteWithPreview | null> {
@@ -267,7 +302,7 @@ export async function searchNotes(query: string): Promise<NoteWithPreview[]> {
   if (!trimmed) return listActiveNotes();
   const db = await getDb();
   // Escape FTS special chars loosely; wrap tokens for prefix match
-  const safe = trimmed.replace(/["*]/g, ' ').trim();
+  const safe = trimmed.replace(/[^\p{L}\p{N}_\s]/gu, ' ').trim();
   if (!safe) return [];
   const ftsQuery = safe
     .split(/\s+/)
@@ -290,11 +325,16 @@ export async function searchNotes(query: string): Promise<NoteWithPreview[]> {
     rows = await db.getAllAsync<NoteRow>(
       `SELECT * FROM notes
        WHERE deleted_at IS NULL
-         AND (title LIKE ? OR blocks_json LIKE ?)
+         AND (title LIKE ? OR blocks_json LIKE ? OR EXISTS (
+           SELECT 1 FROM note_tags nt
+           INNER JOIN tags t ON t.id = nt.tag_id
+           WHERE nt.note_id = notes.id AND t.name LIKE ?
+         ))
        ORDER BY pinned DESC, updated_at DESC`,
+      like,
       like,
       like
     );
   }
-  return Promise.all(rows.map((r) => withPreview(mapNote(r))));
+  return withPreviews(rows.map(mapNote));
 }

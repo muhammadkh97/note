@@ -26,9 +26,16 @@ export async function listFolders(): Promise<Folder[]> {
 
 export async function createFolder(name: string): Promise<Folder> {
   const db = await getDb();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Folder name cannot be empty');
+  const duplicate = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM folders WHERE name = ? COLLATE NOCASE',
+    trimmed
+  );
+  if (duplicate) throw new Error('Folder name already exists');
   const folder: Folder = {
     id: newId(),
-    name: name.trim(),
+    name: trimmed,
     createdAt: Date.now(),
   };
   await db.runAsync(
@@ -42,7 +49,15 @@ export async function createFolder(name: string): Promise<Folder> {
 
 export async function renameFolder(id: string, name: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync('UPDATE folders SET name = ? WHERE id = ?', name.trim(), id);
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Folder name cannot be empty');
+  const duplicate = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM folders WHERE name = ? COLLATE NOCASE AND id != ?',
+    trimmed,
+    id
+  );
+  if (duplicate) throw new Error('Folder name already exists');
+  await db.runAsync('UPDATE folders SET name = ? WHERE id = ?', trimmed, id);
 }
 
 export async function deleteFolder(id: string): Promise<void> {

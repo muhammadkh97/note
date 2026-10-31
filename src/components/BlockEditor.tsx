@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import React from 'react';
 import {
+  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -49,21 +50,28 @@ export function BlockEditor({ blocks, onChange }: Props) {
   };
 
   const addImage = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    onChange([
-      ...blocks,
-      {
-        id: newId(),
-        type: 'image',
-        uri: result.assets[0].uri,
-      },
-    ]);
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(ar.permissionRequired, ar.photoPermissionNote);
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets[0]) return;
+      onChange([
+        ...blocks,
+        {
+          id: newId(),
+          type: 'image',
+          uri: result.assets[0].uri,
+        },
+      ]);
+    } catch {
+      Alert.alert(ar.error, ar.photoPickerError);
+    }
   };
 
   const updateChecklistItem = (
@@ -109,6 +117,9 @@ export function BlockEditor({ blocks, onChange }: Props) {
               {block.items.map((item) => (
                 <View key={item.id} style={styles.checkRow}>
                   <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={item.text || ar.checklistItem}
+                    accessibilityState={{ checked: item.checked }}
                     onPress={() =>
                       updateChecklistItem(block, item.id, {
                         checked: !item.checked,
@@ -144,9 +155,23 @@ export function BlockEditor({ blocks, onChange }: Props) {
                       },
                     ]}
                   />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={ar.removeChecklistItem}
+                    disabled={block.items.length <= 1}
+                    onPress={() => updateBlock(block.id, {
+                      ...block,
+                      items: block.items.filter((entry) => entry.id !== item.id),
+                    })}
+                    style={[styles.removeItem, { opacity: block.items.length <= 1 ? 0.35 : 1 }]}
+                  >
+                    <Text style={{ color: colors.danger, fontSize: 18 }}>×</Text>
+                  </Pressable>
                 </View>
               ))}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={ar.addChecklist}
                 onPress={() =>
                   updateBlock(block.id, {
                     ...block,
@@ -193,7 +218,7 @@ export function BlockEditor({ blocks, onChange }: Props) {
           ) : null}
 
           {blocks.length > 1 ? (
-            <Pressable onPress={() => removeBlock(block.id)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={ar.removeBlock} onPress={() => removeBlock(block.id)}>
               <Text
                 style={[
                   styles.remove,
@@ -270,6 +295,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 2,
   },
+  removeItem: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
   checkInput: {
     flex: 1,
     fontSize: 15,
